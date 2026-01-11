@@ -3,27 +3,46 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { FontLoader } from 'three/addons/loaders/FontLoader.js';
-import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { FilesetResolver, FaceLandmarker, HandLandmarker } from '@mediapipe/tasks-vision';
 import { Pane } from 'tweakpane';
 
 // ==========================================================
-// 🎨 BURHAN'S BRAND CONFIGURATION
+// 🚨 DEBUG LOGGER (So we know what's happening)
+// ==========================================================
+const debugDiv = document.createElement('div');
+debugDiv.style.position = 'absolute';
+debugDiv.style.top = '10px';
+debugDiv.style.left = '10px';
+debugDiv.style.color = '#00ff00';
+debugDiv.style.fontFamily = 'monospace';
+debugDiv.style.fontSize = '12px';
+debugDiv.style.zIndex = '999';
+debugDiv.style.pointerEvents = 'none';
+document.body.appendChild(debugDiv);
+
+function log(msg) {
+  debugDiv.innerHTML += `> ${msg}<br>`;
+  console.log(msg);
+}
+
+log("Initializing System...");
+
+// ==========================================================
+// 🎨 CONFIGURATION
 // ==========================================================
 const PORTFOLIO_THEME_COLOR = '#D4F842'; // Lime Green
-const GAME_OBJECT_COLOR = '#FFD700';     // Gold Stars
+const GAME_OBJECT_COLOR = '#FFD700';     // Gold
 
 const config = {
   // Visuals
-  faceLayers: 3,         // 3 layers for face depth
-  handLayers: 15,        // 15 layers for THICK hands (Fixed!)
-  particleSize: 0.045,   // Slightly larger for visibility
+  faceLayers: 3,         
+  handLayers: 12,        // 12 Layers for THICK hands
+  particleSize: 0.05,   
   
   // Physics
   lerpSpeed: 0.2,       
   baseNoise: 0.01,
-  centeringSpeed: 0.03,  // Slightly faster centering
+  centeringSpeed: 0.03,  
   
   // Bloom
   bloomStrength: 0.8, 
@@ -45,100 +64,7 @@ const state = {
 };
 
 // ==========================================================
-// 🧊 3D LOGO SETUP (Safe Mode)
-// ==========================================================
-let logoMesh;
-
-function setupLogo() {
-  const loader = new FontLoader();
-  // Using a reliable CDN source with error handling
-  loader.load(
-    'https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_bold.typeface.json', 
-    function (font) {
-      const textGeo = new TextGeometry('BURHAN', {
-        font: font,
-        size: 0.5,
-        height: 0.1,
-        curveSegments: 12,
-        bevelEnabled: true,
-        bevelThickness: 0.02,
-        bevelSize: 0.015,
-        bevelOffset: 0,
-        bevelSegments: 5
-      });
-      textGeo.computeBoundingBox();
-      const centerOffset = -0.5 * (textGeo.boundingBox.max.x - textGeo.boundingBox.min.x);
-      textGeo.translate(centerOffset, 0, 0);
-
-      const materials = [
-        new THREE.MeshStandardMaterial({ 
-          color: PORTFOLIO_THEME_COLOR, 
-          emissive: PORTFOLIO_THEME_COLOR, 
-          emissiveIntensity: 0.6,
-          roughness: 0.2 
-        }), 
-        new THREE.MeshStandardMaterial({ 
-          color: 0x444444, 
-          metalness: 0.9, 
-          roughness: 0.1 
-        })
-      ];
-
-      logoMesh = new THREE.Mesh(textGeo, materials);
-      logoMesh.position.set(-4.2, 2.8, -2); 
-      logoMesh.rotation.x = 0.2;
-      scene.add(logoMesh);
-    },
-    undefined, // onProgress
-    function (err) {
-      console.log("Logo Font Failed to Load - Skipping", err);
-      // App continues even if font fails
-    }
-  );
-}
-
-function animateLogo(time) {
-  if (!logoMesh) return;
-  logoMesh.position.y = 2.8 + Math.sin(time * 1.5) * 0.05;
-  logoMesh.rotation.y = Math.sin(time * 1) * 0.05;
-}
-
-// ==========================================================
-// 🎮 GAME LOGIC
-// ==========================================================
-const targets = []; 
-
-function spawnTarget() {
-  if (targets.length >= 5) return; 
-  const geometry = new THREE.SphereGeometry(0.15, 8, 8);
-  const material = new THREE.MeshBasicMaterial({ color: GAME_OBJECT_COLOR, wireframe: true });
-  const star = new THREE.Mesh(geometry, material);
-  star.position.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 4, (Math.random() * 2) - 1);
-  scene.add(star);
-  targets.push(star);
-}
-
-function updateGame(time) {
-  targets.forEach(t => { t.rotation.x = time * 2; t.rotation.y = time; });
-  if (Math.floor(time) % 2 === 0 && Math.random() > 0.9) spawnTarget();
-}
-
-function checkCollision(position) {
-  for (let i = targets.length - 1; i >= 0; i--) {
-    const t = targets[i];
-    if (position.distanceTo(t.position) < 0.6) {
-      scene.remove(t);
-      targets.splice(i, 1);
-      state.score += 10;
-      updateHUD();
-      config.bloomStrength = 2.5; 
-      setTimeout(() => { config.bloomStrength = 0.8 }, 200);
-    }
-  }
-}
-
-// ==========================================================
-// ℹ️ HUD
+// 🎨 HUD & LOGO (HTML Version - Safer & Cleaner)
 // ==========================================================
 let scoreElement;
 function createHUD() {
@@ -148,30 +74,47 @@ function createHUD() {
   container.style.height = '100%';
   container.style.pointerEvents = 'none'; 
   
+  // LOGO (Top Right)
+  const logo = document.createElement('div');
+  logo.style.position = 'absolute';
+  logo.style.top = '30px';
+  logo.style.right = '30px';
+  logo.style.textAlign = 'right';
+  logo.innerHTML = `
+    <h1 style="margin:0; font-family:sans-serif; font-weight:900; font-size:40px; color:${PORTFOLIO_THEME_COLOR}; letter-spacing:-2px; text-shadow:0 0 20px ${PORTFOLIO_THEME_COLOR}">BURHAN</h1>
+    <div style="font-family:monospace; color:white; font-size:14px; opacity:0.7;">XR DESIGNER // SYSTEM ONLINE</div>
+  `;
+
+  // SCORE (Below Logo)
+  scoreElement = document.createElement('div');
+  scoreElement.style.marginTop = '10px';
+  scoreElement.style.color = GAME_OBJECT_COLOR;
+  scoreElement.style.fontFamily = 'monospace';
+  scoreElement.style.fontSize = '24px';
+  scoreElement.style.fontWeight = 'bold';
+  scoreElement.innerHTML = `SCORE: 000`;
+  logo.appendChild(scoreElement);
+
+  // INSTRUCTIONS (Bottom Left)
   const instr = document.createElement('div');
   instr.style.position = 'absolute';
   instr.style.bottom = '30px';
   instr.style.left = '30px';
   instr.style.color = PORTFOLIO_THEME_COLOR;
   instr.style.fontFamily = "'Courier New', monospace"; 
-  instr.style.background = 'rgba(0, 0, 0, 0.7)';
-  instr.style.padding = '15px';
-  instr.style.borderRadius = '8px';
-  instr.innerHTML = `<b>// SYSTEM ONLINE</b><br>• CATCH STARS<br>• PINCH = BLACK HOLE<br>• AUTO-CENTERING...`;
+  instr.style.background = 'rgba(0, 0, 0, 0.8)';
+  instr.style.padding = '20px';
+  instr.style.borderRadius = '12px';
+  instr.style.border = `1px solid ${PORTFOLIO_THEME_COLOR}`;
+  instr.innerHTML = `
+    <b style="color:white">// CONTROLS</b><br>
+    • CATCH STARS WITH HEAD/HAND<br>
+    • PINCH FINGERS = BLACK HOLE<br>
+    • AUTO-CENTERING ENABLED
+  `;
   
-  scoreElement = document.createElement('div');
-  scoreElement.style.position = 'absolute';
-  scoreElement.style.top = '60px'; 
-  scoreElement.style.right = '30px';
-  scoreElement.style.color = GAME_OBJECT_COLOR;
-  scoreElement.style.fontSize = '20px';
-  scoreElement.style.fontFamily = 'monospace';
-  scoreElement.style.fontWeight = 'bold';
-  scoreElement.style.textShadow = '0 0 10px rgba(255,215,0,0.5)';
-  scoreElement.innerHTML = `SCORE: 000`;
-
+  container.appendChild(logo);
   container.appendChild(instr);
-  container.appendChild(scoreElement);
   document.body.appendChild(container);
 }
 
@@ -185,17 +128,12 @@ function updateHUD() {
 const app = document.querySelector('#app');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#050505'); 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-scene.add(ambientLight);
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-directionalLight.position.set(5, 5, 5);
-scene.add(directionalLight);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.z = 2.5; 
 camera.scale.x = -1; 
 
-const renderer = new THREE.WebGLRenderer({ powerPreference: "high-performance" });
+const renderer = new THREE.WebGLRenderer({ powerPreference: "high-performance", alpha: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 app.appendChild(renderer.domElement);
@@ -211,14 +149,48 @@ composer.addPass(renderScene);
 composer.addPass(bloomPass);
 
 // ==========================================================
-// 💠 VOLUMETRIC PARTICLES (With variable layers)
+// 🎮 GAME LOGIC
+// ==========================================================
+const targets = []; 
+const targetGeo = new THREE.SphereGeometry(0.12, 8, 8);
+const targetMat = new THREE.MeshBasicMaterial({ color: GAME_OBJECT_COLOR, wireframe: true });
+
+function spawnTarget() {
+  if (targets.length >= 6) return; 
+  const star = new THREE.Mesh(targetGeo, targetMat);
+  star.position.set((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 3, (Math.random() * 2) - 1);
+  scene.add(star);
+  targets.push(star);
+}
+
+function updateGame(time) {
+  targets.forEach(t => { t.rotation.x = time * 2; t.rotation.y = time; });
+  if (Math.floor(time) % 2 === 0 && Math.random() > 0.8) spawnTarget();
+}
+
+function checkCollision(position) {
+  for (let i = targets.length - 1; i >= 0; i--) {
+    const t = targets[i];
+    if (position.distanceTo(t.position) < 0.5) {
+      scene.remove(t);
+      targets.splice(i, 1);
+      state.score += 10;
+      updateHUD();
+      config.bloomStrength = 2.0; 
+      setTimeout(() => { config.bloomStrength = 0.8 }, 150);
+    }
+  }
+}
+
+// ==========================================================
+// 💠 VOLUMETRIC PARTICLES
 // ==========================================================
 function getTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 32; canvas.height = 32;
   const ctx = canvas.getContext('2d');
   ctx.beginPath();
-  ctx.arc(16, 16, 8, 0, Math.PI * 2);
+  ctx.arc(16, 16, 10, 0, Math.PI * 2);
   ctx.fillStyle = '#FFFFFF';
   ctx.fill();
   return new THREE.CanvasTexture(canvas);
@@ -228,7 +200,7 @@ function createSystem(landmarkCount, layers, colorHex) {
   const totalParticles = landmarkCount * layers;
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(totalParticles * 3);
-  for(let i=0; i<totalParticles*3; i++) positions[i] = (Math.random()-0.5)*50;
+  for(let i=0; i<totalParticles*3; i++) positions[i] = (Math.random()-0.5)*20; // Initialize wide
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   
   const material = new THREE.PointsMaterial({
@@ -236,22 +208,19 @@ function createSystem(landmarkCount, layers, colorHex) {
     map: getTexture(),
     size: config.particleSize,
     transparent: true,
-    opacity: 0.8,
+    opacity: 0.9,
     blending: THREE.AdditiveBlending,
     depthWrite: false
   });
   
-  // Store layer count in userData so we can access it in loop
   const points = new THREE.Points(geometry, material);
-  points.userData = { layers: layers };
+  points.userData = { layers: layers }; // Store layer count
   return points;
 }
 
-// FACE: 478 points * 3 layers
+// Create Systems
 const faceParticles = createSystem(478, config.faceLayers, PORTFOLIO_THEME_COLOR);
-// HAND: 42 points * 15 layers (DENSE!)
 const handParticles = createSystem(42, config.handLayers, PORTFOLIO_THEME_COLOR); 
-
 scene.add(faceParticles);
 scene.add(handParticles);
 
@@ -262,23 +231,48 @@ let faceLandmarker, handLandmarker, video;
 let lastVideoTime = -1;
 
 async function setupVision() {
-  const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
-  faceLandmarker = await FaceLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true });
-  handLandmarker = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numHands: 2 });
-  startWebcam();
+  log("Loading AI Models...");
+  try {
+    const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
+    
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, { 
+        baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" }, 
+        runningMode: "VIDEO", 
+        numFaces: 1, 
+        outputFaceBlendshapes: true 
+    });
+    
+    handLandmarker = await HandLandmarker.createFromOptions(vision, { 
+        baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, 
+        runningMode: "VIDEO", 
+        numHands: 2 
+    });
+    
+    log("AI Models Loaded.");
+    startWebcam();
+  } catch (err) {
+    log("ERROR LOADING AI: " + err.message);
+  }
 }
 
 function startWebcam() {
+  log("Requesting Camera...");
   video = document.createElement("video");
-  navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "user" } }).then((stream) => {
+  navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "user" } })
+  .then((stream) => {
     video.srcObject = stream;
     video.play();
     video.addEventListener("loadeddata", () => {
-        setupLogo(); 
+        log("Camera Active. System Running.");
         createHUD();
         spawnTarget();
         loop();
+        // Hide Debug log after 3 seconds
+        setTimeout(() => debugDiv.style.display = 'none', 3000);
     });
+  })
+  .catch(err => {
+    log("CAMERA DENIED: " + err.message);
   });
 }
 
@@ -292,20 +286,19 @@ function loop() {
   let startTimeMs = performance.now();
   
   updateGame(time);
-  animateLogo(time);
 
   if (video && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
     
-    // 1. FACE LOGIC
+    // 1. FACE
     if (faceLandmarker) {
       const result = faceLandmarker.detectForVideo(video, startTimeMs);
       if (result.faceLandmarks.length > 0) {
         const landmarks = result.faceLandmarks[0];
+        
+        // Auto-Centering
         const noseX = landmarks[1].x;
         const noseY = landmarks[1].y;
-        
-        // AUTO CENTER LOGIC
         const targetOffsetX = (0.5 - noseX) * 5.0; 
         const targetOffsetY = (0.5 - noseY) * 3.0;
         state.autoCenterOffset.x = THREE.MathUtils.lerp(state.autoCenterOffset.x, targetOffsetX, config.centeringSpeed);
@@ -317,23 +310,23 @@ function loop() {
         const upper = landmarks[13]; const lower = landmarks[14];
         state.isMouthOpen = Math.hypot(upper.x - lower.x, upper.y - lower.y) > config.mouthThreshold;
         
-        updateVolumetricParticles(faceParticles, landmarks, time, true);
+        updateVolumetricParticles(faceParticles, landmarks, time);
       }
     }
     
-    // 2. HAND LOGIC
+    // 2. HAND
     if (handLandmarker) {
       const result = handLandmarker.detectForVideo(video, startTimeMs);
       state.isPinching = false; 
       if (result.landmarks.length > 0) {
-        const hand = result.landmarks[0];
+        const hand = result.landmarks[0]; // Just use first hand
         const thumb = hand[4]; const index = hand[8];
         if (Math.hypot(thumb.x - index.x, thumb.y - index.y) < config.pinchThreshold) {
           state.isPinching = true;
           state.pinchPosition.set((thumb.x - 0.5) * -8.0 + state.autoCenterOffset.x, -(thumb.y - 0.5) * 6.0 + state.autoCenterOffset.y, -thumb.z * 5);
           checkCollision(state.pinchPosition);
         }
-        updateVolumetricParticles(handParticles, result.landmarks.flat(), time, false);
+        updateVolumetricParticles(handParticles, result.landmarks.flat(), time);
       }
     }
   }
@@ -342,17 +335,20 @@ function loop() {
 }
 
 // ==========================================================
-// 💠 VOLUMETRIC UPDATE (Handles variable density)
+// 💠 UNIVERSAL PARTICLE UPDATER
 // ==========================================================
-function updateVolumetricParticles(system, landmarks, time, isFace) {
+function updateVolumetricParticles(system, landmarks, time) {
   const positions = system.geometry.attributes.position.array;
   const count = landmarks.length;
-  const layers = system.userData.layers; // Get specific layer count (3 for face, 15 for hand)
+  const layers = system.userData.layers; // Access specific layer count
   
   const aspect = window.innerWidth / window.innerHeight;
   const spreadX = 9.0 * aspect; 
   const spreadY = 7.0;
   
+  // Safety check to prevent index out of bounds if tracking glitches
+  const limit = Math.floor(positions.length / 3);
+
   for (let i = 0; i < count; i++) {
     const lm = landmarks[i];
     const bx = (lm.x - 0.5) * -spreadX; 
@@ -363,15 +359,13 @@ function updateVolumetricParticles(system, landmarks, time, isFace) {
 
     for (let layer = 0; layer < layers; layer++) {
         const idx = startIdx + (layer * 3);
-        
-        // Distribute layers for volume
-        // Face uses 3 layers. Hand uses 15.
-        // We spread them out slightly in Z depth
-        let depthOffset = (layer - (layers/2)) * 0.1; 
+        if (idx/3 >= limit) continue;
+
+        let depthOffset = (layer - (layers/2)) * 0.15; // Spread layers more
 
         let noise = config.baseNoise;
         if (state.isMouthOpen) noise = 0.05; 
-        if (layer > 0) noise *= 1.5; // Outer layers messier
+        if (layer > 0) noise *= 2.0; 
 
         const nX = Math.sin(time * 3 + i + layer) * noise;
         const nY = Math.cos(time * 2 + i + layer) * noise;
@@ -397,7 +391,7 @@ function updateVolumetricParticles(system, landmarks, time, isFace) {
 }
 
 // ==========================================================
-// 🎛️ UI
+// 🎛️ SETTINGS UI
 // ==========================================================
 const pane = new Pane({ title: 'Burhan Settings' });
 pane.addBinding(config, 'centeringSpeed', { min: 0.0, max: 0.1 });
@@ -409,3 +403,5 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
 });
+
+setupVision();
