@@ -7,7 +7,7 @@ import { FilesetResolver, FaceLandmarker, HandLandmarker } from '@mediapipe/task
 import { Pane } from 'tweakpane';
 
 // ==========================================================
-// 🚨 DEBUG LOGGER (Visual Status Log)
+// 🚨 DEBUG LOGGER
 // ==========================================================
 const debugDiv = document.createElement('div');
 Object.assign(debugDiv.style, {
@@ -19,19 +19,19 @@ function log(msg) { debugDiv.innerHTML += `> ${msg}<br>`; console.log(msg); }
 log("Initializing Burhan XR System...");
 
 // ==========================================================
-// 🎨 CONFIGURATION & STATE
+// 🎨 CONFIGURATION
 // ==========================================================
 const config = {
   // Visuals
-  faceLayers: 3,         // Depth for 3D mode
-  handLayers: 12,        // Thickness for hands
+  faceLayers: 3,         
+  handLayers: 20,        // INCREASED: 20 layers for massive trails
   particleSize: 0.05,
-  use3D: true,           // Toggle 2D/3D
+  use3D: true,           
   
   // Colors
   rainbowMode: false,
   faceColor: '#D4F842',  // Burhan Lime
-  handColor: '#00FFFF',  // Cyan (Multicolor contrast)
+  handColor: '#00FFFF',  // Cyan Energy
   
   // Physics
   lerpSpeed: 0.2,       
@@ -39,9 +39,9 @@ const config = {
   centeringSpeed: 0.03,  
   
   // Bloom
-  bloomStrength: 0.8, 
+  bloomStrength: 1.2,    // Increased glow for hands
   bloomThreshold: 0.1,
-  bloomRadius: 0.5,
+  bloomRadius: 0.6,
   
   // Interactions
   mouthThreshold: 0.05, 
@@ -54,11 +54,12 @@ const state = {
   isMouthOpen: false,
   isPinching: false,
   pinchPosition: new THREE.Vector3(0, 0, 0),
-  headPosition: new THREE.Vector3(0, 0, 0) 
+  headPosition: new THREE.Vector3(0, 0, 0),
+  handCenters: [new THREE.Vector3(), new THREE.Vector3()] // Track hand centers for orbits
 };
 
 // ==========================================================
-// 🖥️ UI: HUD & HEADER (HTML Overlay)
+// 🖥️ UI: HUD & HEADER
 // ==========================================================
 let scoreElement;
 
@@ -66,7 +67,6 @@ function createHUD() {
   const container = document.createElement('div');
   Object.assign(container.style, { position: 'absolute', width: '100%', height: '100%', pointerEvents: 'none' });
   
-  // 1. BURHAN HEADER (Top Right)
   const header = document.createElement('div');
   Object.assign(header.style, { position: 'absolute', top: '20px', right: '20px', textAlign: 'right' });
   header.innerHTML = `
@@ -81,13 +81,11 @@ function createHUD() {
     ">XR INTERACTIVE MIRROR</div>
   `;
 
-  // 2. SCORE
   scoreElement = document.createElement('div');
   Object.assign(scoreElement.style, { marginTop: '10px', color: '#FFD700', fontFamily: 'monospace', fontSize: '24px', fontWeight: 'bold' });
   scoreElement.innerHTML = `SCORE: 000`;
   header.appendChild(scoreElement);
 
-  // 3. INSTRUCTIONS (Bottom Left)
   const instr = document.createElement('div');
   Object.assign(instr.style, {
     position: 'absolute', bottom: '30px', left: '30px', color: config.faceColor,
@@ -96,7 +94,7 @@ function createHUD() {
   });
   instr.innerHTML = `
     <b style="color:white; font-size:16px;">// CONTROLS</b><br>
-    <span style="color:#aaa">• CATCH STARS</span><br>
+    <span style="color:#aaa">• MOVE HANDS = LIGHT TRAILS</span><br>
     <span style="color:#aaa">• PINCH = BLACK HOLE</span><br>
     <span style="color:#aaa">• OPEN MOUTH = SHOCKWAVE</span>
   `;
@@ -119,7 +117,7 @@ scene.background = new THREE.Color('#050505');
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.z = 2.5; 
-camera.scale.x = -1; // Mirror Flip
+camera.scale.x = -1; 
 
 const renderer = new THREE.WebGLRenderer({ powerPreference: "high-performance", alpha: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -137,7 +135,7 @@ composer.addPass(renderScene);
 composer.addPass(bloomPass);
 
 // ==========================================================
-// 🎮 GAME LOGIC (Stars)
+// 🎮 GAME LOGIC
 // ==========================================================
 const targets = []; 
 const targetGeo = new THREE.SphereGeometry(0.12, 8, 8);
@@ -159,13 +157,13 @@ function updateGame(time) {
 function checkCollision(position) {
   for (let i = targets.length - 1; i >= 0; i--) {
     const t = targets[i];
-    if (position.distanceTo(t.position) < 0.5) {
+    if (position.distanceTo(t.position) < 0.6) { // Increased hit radius for hands
       scene.remove(t);
       targets.splice(i, 1);
       state.score += 10;
       updateHUD();
-      config.bloomStrength = 2.5; // Flash effect
-      setTimeout(() => { config.bloomStrength = 0.8 }, 150);
+      config.bloomStrength = 3.0; 
+      setTimeout(() => { config.bloomStrength = 1.2 }, 150);
     }
   }
 }
@@ -246,173 +244,4 @@ function startWebcam() {
 
 // ==========================================================
 // 🔄 ANIMATION LOOP
-// ==========================================================
-const clock = new THREE.Clock();
-
-function loop() {
-  const time = clock.getElapsedTime();
-  let startTimeMs = performance.now();
-  
-  updateGame(time);
-
-  // Rainbow Mode Logic
-  if (config.rainbowMode) {
-    const hue = (time * 0.2) % 1;
-    faceParticles.material.color.setHSL(hue, 1, 0.5);
-    handParticles.material.color.setHSL((hue + 0.5) % 1, 1, 0.5); 
-  } else {
-    faceParticles.material.color.lerp(new THREE.Color(config.faceColor), 0.1);
-    handParticles.material.color.lerp(new THREE.Color(config.handColor), 0.1);
-  }
-
-  if (video && video.currentTime !== lastVideoTime) {
-    lastVideoTime = video.currentTime;
-    
-    // 1. FACE
-    if (faceLandmarker) {
-      const result = faceLandmarker.detectForVideo(video, startTimeMs);
-      if (result.faceLandmarks.length > 0) {
-        const landmarks = result.faceLandmarks[0];
-        
-        // Auto-Center
-        const noseX = landmarks[1].x;
-        const noseY = landmarks[1].y;
-        const targetOffsetX = (0.5 - noseX) * 5.0; 
-        const targetOffsetY = (0.5 - noseY) * 3.0;
-        state.autoCenterOffset.x = THREE.MathUtils.lerp(state.autoCenterOffset.x, targetOffsetX, config.centeringSpeed);
-        state.autoCenterOffset.y = THREE.MathUtils.lerp(state.autoCenterOffset.y, targetOffsetY, config.centeringSpeed);
-        
-        state.headPosition.set((noseX - 0.5) * -8 + state.autoCenterOffset.x, -(noseY - 0.5) * 6 + state.autoCenterOffset.y, 0);
-        checkCollision(state.headPosition);
-        
-        const upper = landmarks[13]; const lower = landmarks[14];
-        state.isMouthOpen = Math.hypot(upper.x - lower.x, upper.y - lower.y) > config.mouthThreshold;
-        
-        if (state.isMouthOpen) faceParticles.material.color.setHex(0xFFFFFF); // Shockwave Color
-
-        updateVolumetricParticles(faceParticles, landmarks, time);
-      }
-    }
-    
-    // 2. HAND
-    if (handLandmarker) {
-      const result = handLandmarker.detectForVideo(video, startTimeMs);
-      state.isPinching = false; 
-      if (result.landmarks.length > 0) {
-        const hand = result.landmarks[0]; 
-        const thumb = hand[4]; const index = hand[8];
-        if (Math.hypot(thumb.x - index.x, thumb.y - index.y) < config.pinchThreshold) {
-          state.isPinching = true;
-          state.pinchPosition.set((thumb.x - 0.5) * -8.0 + state.autoCenterOffset.x, -(thumb.y - 0.5) * 6.0 + state.autoCenterOffset.y, -thumb.z * 5);
-          checkCollision(state.pinchPosition);
-        }
-        updateVolumetricParticles(handParticles, result.landmarks.flat(), time);
-      }
-    }
-  }
-  composer.render();
-  requestAnimationFrame(loop);
-}
-
-// ==========================================================
-// 💠 UPDATE LOGIC (Handles 2D/3D Switching)
-// ==========================================================
-function updateVolumetricParticles(system, landmarks, time) {
-  const positions = system.geometry.attributes.position.array;
-  const count = landmarks.length;
-  const layers = system.userData.layers; 
-  const aspect = window.innerWidth / window.innerHeight;
-  const spreadX = 9.0 * aspect; 
-  const spreadY = 7.0;
-  
-  const limit = Math.floor(positions.length / 3);
-
-  for (let i = 0; i < count; i++) {
-    const lm = landmarks[i];
-    const bx = (lm.x - 0.5) * -spreadX; 
-    const by = -(lm.y - 0.5) * spreadY; 
-    const bz = -lm.z * 5;
-    
-    const startIdx = i * layers * 3;
-
-    for (let layer = 0; layer < layers; layer++) {
-        // 2D MODE CHECK: If 3D is off, hide all layers except layer 0
-        if (!config.use3D && layer > 0) {
-           const idx = startIdx + (layer * 3);
-           if (idx/3 < limit) positions[idx+2] = 9999; 
-           continue;
-        }
-
-        const idx = startIdx + (layer * 3);
-        if (idx/3 >= limit) continue;
-
-        let depthOffset = (layer - (layers/2)) * 0.15; 
-        
-        let noise = config.baseNoise;
-        if (state.isMouthOpen) noise = 0.05; 
-        if (layer > 0) noise *= 2.0; 
-
-        const nX = Math.sin(time * 3 + i + layer) * noise;
-        const nY = Math.cos(time * 2 + i + layer) * noise;
-
-        let tx = bx + state.autoCenterOffset.x + nX;
-        let ty = by + state.autoCenterOffset.y + nY;
-        let tz = bz + depthOffset;
-
-        if (state.isPinching) {
-           const dist = Math.sqrt(Math.pow(state.pinchPosition.x - tx, 2) + Math.pow(state.pinchPosition.y - ty, 2));
-           if (dist < 2.5) {
-               tx = THREE.MathUtils.lerp(tx, state.pinchPosition.x, 0.2);
-               ty = THREE.MathUtils.lerp(ty, state.pinchPosition.y, 0.2);
-           }
-        }
-
-        positions[idx]   += (tx - positions[idx]) * config.lerpSpeed;
-        positions[idx+1] += (ty - positions[idx+1]) * config.lerpSpeed;
-        positions[idx+2] += (tz - positions[idx+2]) * config.lerpSpeed;
-    }
-  }
-  system.geometry.attributes.position.needsUpdate = true;
-}
-
-// ==========================================================
-// 🎛️ CONTROLS (User Settings)
-// ==========================================================
-const pane = new Pane({ title: 'Burhan Controls' });
-
-// 1. Dimensions
-const dimFolder = pane.addFolder({ title: 'Dimensions' });
-dimFolder.addBinding(config, 'use3D', { label: '3D Mode' });
-dimFolder.addBinding(config, 'particleSize', { min: 0.01, max: 0.1, label: 'Size' })
-  .on('change', (ev) => {
-     faceParticles.material.size = ev.value;
-     handParticles.material.size = ev.value;
-  });
-
-// 2. Colors
-const colFolder = pane.addFolder({ title: 'Colors' });
-colFolder.addBinding(config, 'rainbowMode', { label: 'Rainbow Loop' });
-colFolder.addBinding(config, 'faceColor', { label: 'Face Color' });
-colFolder.addBinding(config, 'handColor', { label: 'Hand Color' });
-
-const randBtn = colFolder.addButton({ title: 'RANDOMIZE ALL' });
-randBtn.on('click', () => {
-    config.faceColor = '#' + Math.floor(Math.random()*16777215).toString(16);
-    config.handColor = '#' + Math.floor(Math.random()*16777215).toString(16);
-    config.rainbowMode = false;
-    pane.refresh(); 
-});
-
-// 3. Effects
-const fxFolder = pane.addFolder({ title: 'Effects' });
-fxFolder.addBinding(config, 'bloomStrength', { min: 0, max: 3, label: 'Glow' })
-  .on('change', (ev) => bloomPass.strength = ev.value);
-
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  composer.setSize(window.innerWidth, window.innerHeight);
-});
-
-setupVision();
+// =================================================
