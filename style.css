@@ -1,2 +1,9 @@
-body { margin: 0; background: #000; overflow: hidden; }
-canvas { display: block; }
+body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #000;
+    font-family: sans-serif;
+  }
+  canvas {
+    display: block;
+  }
