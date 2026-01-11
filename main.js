@@ -7,6 +7,18 @@ import { FilesetResolver, FaceLandmarker, HandLandmarker } from '@mediapipe/task
 import { Pane } from 'tweakpane';
 
 // ==========================================================
+// 🚨 DEBUG LOGGER (Visual Status Log)
+// ==========================================================
+const debugDiv = document.createElement('div');
+Object.assign(debugDiv.style, {
+  position: 'absolute', top: '10px', left: '10px', color: '#00ff00',
+  fontFamily: 'monospace', fontSize: '10px', zIndex: '999', pointerEvents: 'none'
+});
+document.body.appendChild(debugDiv);
+function log(msg) { debugDiv.innerHTML += `> ${msg}<br>`; console.log(msg); }
+log("Initializing Burhan XR System...");
+
+// ==========================================================
 // 🎨 CONFIGURATION & STATE
 // ==========================================================
 const config = {
@@ -46,71 +58,42 @@ const state = {
 };
 
 // ==========================================================
-// 🖥️ UI: HUD & HEADER
+// 🖥️ UI: HUD & HEADER (HTML Overlay)
 // ==========================================================
 let scoreElement;
 
 function createHUD() {
   const container = document.createElement('div');
-  container.style.position = 'absolute';
-  container.style.width = '100%';
-  container.style.height = '100%';
-  container.style.pointerEvents = 'none'; // Let clicks pass through
+  Object.assign(container.style, { position: 'absolute', width: '100%', height: '100%', pointerEvents: 'none' });
   
   // 1. BURHAN HEADER (Top Right)
   const header = document.createElement('div');
-  header.style.position = 'absolute';
-  header.style.top = '20px';
-  header.style.right = '20px';
-  header.style.textAlign = 'right';
+  Object.assign(header.style, { position: 'absolute', top: '20px', right: '20px', textAlign: 'right' });
   header.innerHTML = `
     <h1 style="
-      margin: 0; 
-      font-family: 'Segoe UI', sans-serif; 
-      font-weight: 900; 
-      font-size: 48px; 
-      color: #fff; 
-      text-transform: uppercase; 
-      letter-spacing: -1px;
-      text-shadow: 
-        0 0 10px ${config.faceColor},
-        0 0 20px ${config.faceColor},
-        0 0 40px ${config.faceColor};
+      margin: 0; font-family: 'Segoe UI', sans-serif; font-weight: 900; 
+      font-size: 48px; color: #fff; text-transform: uppercase; letter-spacing: -1px;
+      text-shadow: 0 0 10px ${config.faceColor}, 0 0 20px ${config.faceColor};
     ">BURHAN</h1>
     <div style="
-      font-family: monospace; 
-      color: #ccc; 
-      font-size: 14px; 
-      letter-spacing: 2px;
-      background: rgba(0,0,0,0.5);
-      padding: 5px 10px;
-      border-radius: 4px;
-      display: inline-block;
-    ">INTERACTIVE MIRROR v2.0</div>
+      font-family: monospace; color: #ccc; font-size: 14px; letter-spacing: 2px;
+      background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 4px; display: inline-block;
+    ">XR INTERACTIVE MIRROR</div>
   `;
 
-  // 2. SCORE (Below Header)
+  // 2. SCORE
   scoreElement = document.createElement('div');
-  scoreElement.style.marginTop = '10px';
-  scoreElement.style.color = '#FFD700';
-  scoreElement.style.fontFamily = 'monospace';
-  scoreElement.style.fontSize = '24px';
-  scoreElement.style.fontWeight = 'bold';
+  Object.assign(scoreElement.style, { marginTop: '10px', color: '#FFD700', fontFamily: 'monospace', fontSize: '24px', fontWeight: 'bold' });
   scoreElement.innerHTML = `SCORE: 000`;
   header.appendChild(scoreElement);
 
   // 3. INSTRUCTIONS (Bottom Left)
   const instr = document.createElement('div');
-  instr.style.position = 'absolute';
-  instr.style.bottom = '30px';
-  instr.style.left = '30px';
-  instr.style.color = config.faceColor;
-  instr.style.fontFamily = "monospace"; 
-  instr.style.background = 'rgba(0, 0, 0, 0.85)';
-  instr.style.padding = '20px';
-  instr.style.borderRadius = '12px';
-  instr.style.borderLeft = `4px solid ${config.faceColor}`;
-  instr.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
+  Object.assign(instr.style, {
+    position: 'absolute', bottom: '30px', left: '30px', color: config.faceColor,
+    fontFamily: "monospace", background: 'rgba(0, 0, 0, 0.85)', padding: '20px',
+    borderRadius: '12px', borderLeft: `4px solid ${config.faceColor}`, boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+  });
   instr.innerHTML = `
     <b style="color:white; font-size:16px;">// CONTROLS</b><br>
     <span style="color:#aaa">• CATCH STARS</span><br>
@@ -181,8 +164,7 @@ function checkCollision(position) {
       targets.splice(i, 1);
       state.score += 10;
       updateHUD();
-      // Flash effect
-      config.bloomStrength = 2.5; 
+      config.bloomStrength = 2.5; // Flash effect
       setTimeout(() => { config.bloomStrength = 0.8 }, 150);
     }
   }
@@ -206,7 +188,6 @@ function createSystem(landmarkCount, layers, colorHex) {
   const totalParticles = landmarkCount * layers;
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(totalParticles * 3);
-  // Initial scatter
   for(let i=0; i<totalParticles*3; i++) positions[i] = (Math.random()-0.5)*20; 
   
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -238,10 +219,14 @@ let faceLandmarker, handLandmarker, video;
 let lastVideoTime = -1;
 
 async function setupVision() {
-  const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
-  faceLandmarker = await FaceLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true });
-  handLandmarker = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numHands: 2 });
-  startWebcam();
+  log("Loading AI Models...");
+  try {
+    const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true });
+    handLandmarker = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numHands: 2 });
+    log("AI Ready. Starting Camera...");
+    startWebcam();
+  } catch(e) { log("AI Error: " + e); }
 }
 
 function startWebcam() {
@@ -250,11 +235,13 @@ function startWebcam() {
     video.srcObject = stream;
     video.play();
     video.addEventListener("loadeddata", () => {
+        log("System Online.");
         createHUD();
         spawnTarget();
         loop();
+        setTimeout(() => debugDiv.style.display = 'none', 3000);
     });
-  });
+  }).catch(e => log("Camera Error: " + e));
 }
 
 // ==========================================================
@@ -272,9 +259,8 @@ function loop() {
   if (config.rainbowMode) {
     const hue = (time * 0.2) % 1;
     faceParticles.material.color.setHSL(hue, 1, 0.5);
-    handParticles.material.color.setHSL((hue + 0.5) % 1, 1, 0.5); // Offset hands
+    handParticles.material.color.setHSL((hue + 0.5) % 1, 1, 0.5); 
   } else {
-    // Return to selected colors slowly if not in rainbow mode
     faceParticles.material.color.lerp(new THREE.Color(config.faceColor), 0.1);
     handParticles.material.color.lerp(new THREE.Color(config.handColor), 0.1);
   }
@@ -352,7 +338,6 @@ function updateVolumetricParticles(system, landmarks, time) {
     for (let layer = 0; layer < layers; layer++) {
         // 2D MODE CHECK: If 3D is off, hide all layers except layer 0
         if (!config.use3D && layer > 0) {
-           // Move hidden particles far away so they don't render
            const idx = startIdx + (layer * 3);
            if (idx/3 < limit) positions[idx+2] = 9999; 
            continue;
@@ -415,7 +400,7 @@ randBtn.on('click', () => {
     config.faceColor = '#' + Math.floor(Math.random()*16777215).toString(16);
     config.handColor = '#' + Math.floor(Math.random()*16777215).toString(16);
     config.rainbowMode = false;
-    pane.refresh(); // Update the UI to show new colors
+    pane.refresh(); 
 });
 
 // 3. Effects
