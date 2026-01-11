@@ -3,6 +3,9 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+// NEW IMPORTS FOR 3D TEXT
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { FilesetResolver, FaceLandmarker, HandLandmarker } from '@mediapipe/tasks-vision';
 import { Pane } from 'tweakpane';
 
@@ -10,63 +13,166 @@ import { Pane } from 'tweakpane';
 // 🎨 BURHAN'S BRAND CONFIGURATION
 // ==========================================================
 const PORTFOLIO_THEME_COLOR = '#D4F842'; // Lime Green
-const GOLD_COLOR = '#FFD700';            // Smile
-const SHOCK_COLOR = '#FFFFFF';           // Shockwave
+const GAME_OBJECT_COLOR = '#FFD700';     // Gold Stars
 
 const config = {
-  // Visuals
-  particleCount: 1400,
-  particleSize: 0.045, 
-  
-  // Physics
-  lerpSpeed: 0.3,       
+  particleLayers: 3, 
+  particleSize: 0.04, 
+  lerpSpeed: 0.2,       
   baseNoise: 0.01,
-  
-  // Bloom
-  bloomStrength: 0.7, 
+  centeringSpeed: 0.02,
+  bloomStrength: 0.8, 
   bloomThreshold: 0.1,
-  bloomRadius: 0.4,
-  
-  // Interaction Thresholds
+  bloomRadius: 0.5,
   mouthThreshold: 0.05, 
-  smileThreshold: 0.5, 
-  pinchThreshold: 0.05, 
+  pinchThreshold: 0.05,
 };
 
 const state = {
+  score: 0,
+  autoCenterOffset: new THREE.Vector3(0, 0, 0), 
   isMouthOpen: false,
-  isSmiling: false,
   isPinching: false,
-  pinchPosition: new THREE.Vector3(0, 0, 0)
+  pinchPosition: new THREE.Vector3(0, 0, 0),
+  headPosition: new THREE.Vector3(0, 0, 0) 
 };
 
 // ==========================================================
-// ℹ️ INSTRUCTIONAL OVERLAY
+// 🧊 3D LOGO SETUP (REALISTIC & FUN)
 // ==========================================================
-function createInstructions() {
-  const div = document.createElement('div');
-  div.style.position = 'absolute';
-  div.style.bottom = '30px';
-  div.style.left = '30px';
-  div.style.color = PORTFOLIO_THEME_COLOR;
-  div.style.fontFamily = "'Courier New', monospace"; 
-  div.style.background = 'rgba(0, 0, 0, 0.7)';
-  div.style.padding = '20px';
-  div.style.borderRadius = '12px';
-  div.style.border = `1px solid ${PORTFOLIO_THEME_COLOR}`;
-  div.style.pointerEvents = 'none'; 
-  div.style.backdropFilter = 'blur(5px)';
-  div.style.maxWidth = '300px';
+let logoMesh;
 
-  div.innerHTML = `
-    <h3 style="margin: 0 0 10px 0; color: white; font-size: 16px;">// INTERACTION MODE</h3>
-    <ul style="padding-left: 20px; margin: 0; font-size: 14px; line-height: 1.6;">
-      <li><b style="color:white">🤏 PINCH FINGERS:</b> Black Hole</li>
-      <li><b style="color:white">😁 SMILE WIDE:</b> Anti-Gravity</li>
-      <li><b style="color:white">😮 OPEN MOUTH:</b> Shockwave</li>
-    </ul>
-  `;
-  document.body.appendChild(div);
+function setupLogo() {
+  const loader = new FontLoader();
+  // Load standard font from CDN
+  loader.load('https://threejs.org/examples/fonts/helvetiker_bold.typeface.json', function (font) {
+    const textGeo = new TextGeometry('BURHAN', {
+      font: font,
+      size: 0.5, // Size of text
+      height: 0.1, // Thickness
+      curveSegments: 12,
+      bevelEnabled: true,
+      bevelThickness: 0.02,
+      bevelSize: 0.015,
+      bevelOffset: 0,
+      bevelSegments: 5
+    });
+
+    // Center geometry for better rotation
+    textGeo.computeBoundingBox();
+    const centerOffset = -0.5 * (textGeo.boundingBox.max.x - textGeo.boundingBox.min.x);
+    textGeo.translate(centerOffset, 0, 0);
+
+    // Realistic Materials (Front face glow, Side face metal)
+    const materials = [
+      new THREE.MeshStandardMaterial({ 
+        color: PORTFOLIO_THEME_COLOR, 
+        emissive: PORTFOLIO_THEME_COLOR, 
+        emissiveIntensity: 0.6,
+        roughness: 0.2 
+      }), // Front
+      new THREE.MeshStandardMaterial({ 
+        color: 0x444444, 
+        metalness: 0.9, 
+        roughness: 0.1 
+      }) // Side
+    ];
+
+    logoMesh = new THREE.Mesh(textGeo, materials);
+    
+    // Position Top Right (Negative X due to mirrored camera)
+    // Adjusted to sit nicely near the score
+    logoMesh.position.set(-4.2, 2.8, -2); 
+    // Tilt slightly down towards viewer
+    logoMesh.rotation.x = 0.2;
+
+    scene.add(logoMesh);
+  });
+}
+
+function animateLogo(time) {
+  if (!logoMesh) return;
+  // Gentle floating and wobbling animation
+  logoMesh.position.y = 2.8 + Math.sin(time * 1.5) * 0.05;
+  logoMesh.rotation.y = Math.sin(time * 1) * 0.05;
+}
+
+// ==========================================================
+// 🎮 GAME LOGIC
+// ==========================================================
+const targets = []; 
+
+function spawnTarget() {
+  if (targets.length >= 5) return; 
+  const geometry = new THREE.SphereGeometry(0.15, 8, 8);
+  const material = new THREE.MeshBasicMaterial({ color: GAME_OBJECT_COLOR, wireframe: true });
+  const star = new THREE.Mesh(geometry, material);
+  star.position.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 4, (Math.random() * 2) - 1);
+  scene.add(star);
+  targets.push(star);
+}
+
+function updateGame(time) {
+  targets.forEach(t => { t.rotation.x = time * 2; t.rotation.y = time; });
+  if (Math.floor(time) % 2 === 0 && Math.random() > 0.9) spawnTarget();
+}
+
+function checkCollision(position) {
+  for (let i = targets.length - 1; i >= 0; i--) {
+    const t = targets[i];
+    if (position.distanceTo(t.position) < 0.6) {
+      scene.remove(t);
+      targets.splice(i, 1);
+      state.score += 10;
+      updateHUD();
+      config.bloomStrength = 2.5; // Harder flash
+      setTimeout(() => { config.bloomStrength = 0.8 }, 200);
+    }
+  }
+}
+
+// ==========================================================
+// ℹ️ HUD
+// ==========================================================
+let scoreElement;
+function createHUD() {
+  const container = document.createElement('div');
+  container.style.position = 'absolute';
+  container.style.width = '100%';
+  container.style.height = '100%';
+  container.style.pointerEvents = 'none'; 
+  
+  // Instructions Bottom Left
+  const instr = document.createElement('div');
+  instr.style.position = 'absolute';
+  instr.style.bottom = '30px';
+  instr.style.left = '30px';
+  instr.style.color = PORTFOLIO_THEME_COLOR;
+  instr.style.fontFamily = "'Courier New', monospace"; 
+  instr.style.background = 'rgba(0, 0, 0, 0.7)';
+  instr.style.padding = '15px';
+  instr.style.borderRadius = '8px';
+  instr.innerHTML = `<b>// SYSTEM ONLINE</b><br>• MOVE HEAD TO CATCH STARS<br>• PINCH FINGERS = BLACK HOLE<br>• AUTO-CENTERING ACTIVE`;
+  
+  // Score Top Right (Moved slightly down to make room for 3D logo)
+  scoreElement = document.createElement('div');
+  scoreElement.style.position = 'absolute';
+  scoreElement.style.top = '60px'; // Moved down
+  scoreElement.style.right = '30px';
+  scoreElement.style.color = GAME_OBJECT_COLOR;
+  scoreElement.style.fontSize = '20px';
+  scoreElement.style.fontFamily = 'monospace';
+  scoreElement.style.fontWeight = 'bold';
+  scoreElement.style.textShadow = '0 0 10px rgba(255,215,0,0.5)';
+  scoreElement.innerHTML = `SCORE: 000`;
+
+  container.appendChild(instr);
+  container.appendChild(scoreElement);
+  document.body.appendChild(container);
+}
+
+function updateHUD() {
+  if(scoreElement) scoreElement.innerHTML = `SCORE: ${state.score.toString().padStart(3, '0')}`;
 }
 
 // ==========================================================
@@ -75,17 +181,22 @@ function createInstructions() {
 const app = document.querySelector('#app');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#050505'); 
+// Add light for the 3D logo
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+directionalLight.position.set(5, 5, 5);
+scene.add(directionalLight);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.z = 2; 
-camera.scale.x = -1; // Mirror Flip
+camera.position.z = 2.5; 
+camera.scale.x = -1; 
 
 const renderer = new THREE.WebGLRenderer({ powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 app.appendChild(renderer.domElement);
 
-// Post-Processing
 const renderScene = new RenderPass(scene, camera);
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
 bloomPass.threshold = config.bloomThreshold;
@@ -97,7 +208,7 @@ composer.addPass(renderScene);
 composer.addPass(bloomPass);
 
 // ==========================================================
-// 💠 PARTICLES
+// 💠 VOLUMETRIC PARTICLES
 // ==========================================================
 function getTexture() {
   const canvas = document.createElement('canvas');
@@ -110,27 +221,26 @@ function getTexture() {
   return new THREE.CanvasTexture(canvas);
 }
 
-function createSystem(count, colorHex) {
+function createSystem(landmarkCount, colorHex) {
+  const totalParticles = landmarkCount * config.particleLayers;
   const geometry = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
-  for(let i=0; i<count*3; i++) positions[i] = (Math.random()-0.5)*50;
+  const positions = new Float32Array(totalParticles * 3);
+  for(let i=0; i<totalParticles*3; i++) positions[i] = (Math.random()-0.5)*50;
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  
   const material = new THREE.PointsMaterial({
     color: new THREE.Color(colorHex),
     map: getTexture(),
     size: config.particleSize,
     transparent: true,
-    opacity: 0.9,
+    opacity: 0.8,
     blending: THREE.AdditiveBlending,
     depthWrite: false
   });
-
   return new THREE.Points(geometry, material);
 }
 
 const faceParticles = createSystem(478, PORTFOLIO_THEME_COLOR);
-const handParticles = createSystem(84, PORTFOLIO_THEME_COLOR); 
+const handParticles = createSystem(42, PORTFOLIO_THEME_COLOR); 
 scene.add(faceParticles);
 scene.add(handParticles);
 
@@ -142,17 +252,8 @@ let lastVideoTime = -1;
 
 async function setupVision() {
   const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
-  
-  faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-    baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
-    runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true
-  });
-  
-  handLandmarker = await HandLandmarker.createFromOptions(vision, {
-    baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" },
-    runningMode: "VIDEO", numHands: 2
-  });
-  
+  faceLandmarker = await FaceLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true });
+  handLandmarker = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numHands: 2 });
   startWebcam();
 }
 
@@ -161,8 +262,12 @@ function startWebcam() {
   navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "user" } }).then((stream) => {
     video.srcObject = stream;
     video.play();
-    video.addEventListener("loadeddata", loop);
-    createInstructions(); 
+    video.addEventListener("loadeddata", () => {
+        setupLogo(); // Initialize 3D Logo
+        createHUD();
+        spawnTarget();
+        loop();
+    });
   });
 }
 
@@ -174,155 +279,108 @@ const clock = new THREE.Clock();
 function loop() {
   const time = clock.getElapsedTime();
   let startTimeMs = performance.now();
+  
+  updateGame(time);
+  animateLogo(time); // Animate the 3D logo
 
   if (video && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
-    
-    // --- 1. FACE LOGIC ---
     if (faceLandmarker) {
       const result = faceLandmarker.detectForVideo(video, startTimeMs);
       if (result.faceLandmarks.length > 0) {
         const landmarks = result.faceLandmarks[0];
-        
-        // INTERACTION: Shockwave (Mouth Open)
-        const upper = landmarks[13];
-        const lower = landmarks[14];
-        const mouthOpenDist = Math.hypot(upper.x - lower.x, upper.y - lower.y);
-        state.isMouthOpen = mouthOpenDist > config.mouthThreshold;
-
-        // INTERACTION: Golden Smile
-        const leftCorner = landmarks[61];
-        const rightCorner = landmarks[291];
-        const mouthWidth = Math.hypot(leftCorner.x - rightCorner.x, leftCorner.y - rightCorner.y);
-        state.isSmiling = mouthWidth > 0.45 && !state.isMouthOpen;
-
-        // Apply Colors
-        let targetColor = PORTFOLIO_THEME_COLOR;
-        if (state.isMouthOpen) targetColor = SHOCK_COLOR;
-        if (state.isSmiling) targetColor = GOLD_COLOR;
-        
-        faceParticles.material.color.lerp(new THREE.Color(targetColor), 0.2);
-        
-        updateParticles(faceParticles, landmarks, time, true);
+        const noseX = landmarks[1].x;
+        const noseY = landmarks[1].y;
+        const targetOffsetX = (0.5 - noseX) * 5.0; 
+        const targetOffsetY = (0.5 - noseY) * 3.0;
+        state.autoCenterOffset.x = THREE.MathUtils.lerp(state.autoCenterOffset.x, targetOffsetX, config.centeringSpeed);
+        state.autoCenterOffset.y = THREE.MathUtils.lerp(state.autoCenterOffset.y, targetOffsetY, config.centeringSpeed);
+        state.headPosition.set((noseX - 0.5) * -8 + state.autoCenterOffset.x, -(noseY - 0.5) * 6 + state.autoCenterOffset.y, 0);
+        checkCollision(state.headPosition);
+        const upper = landmarks[13]; const lower = landmarks[14];
+        state.isMouthOpen = Math.hypot(upper.x - lower.x, upper.y - lower.y) > config.mouthThreshold;
+        updateVolumetricParticles(faceParticles, landmarks, time, true);
       }
     }
-    
-    // --- 2. HAND LOGIC ---
     if (handLandmarker) {
       const result = handLandmarker.detectForVideo(video, startTimeMs);
       state.isPinching = false; 
-
       if (result.landmarks.length > 0) {
         const hand = result.landmarks[0];
-        const thumb = hand[4];
-        const index = hand[8];
-        const pinchDist = Math.hypot(thumb.x - index.x, thumb.y - index.y);
-        
-        if (pinchDist < config.pinchThreshold) {
+        const thumb = hand[4]; const index = hand[8];
+        if (Math.hypot(thumb.x - index.x, thumb.y - index.y) < config.pinchThreshold) {
           state.isPinching = true;
-          state.pinchPosition.set(
-            (thumb.x - 0.5) * -8.0 * (window.innerWidth/window.innerHeight),
-            -(thumb.y - 0.5) * 6.0,
-            -thumb.z * 5
-          );
+          state.pinchPosition.set((thumb.x - 0.5) * -8.0 + state.autoCenterOffset.x, -(thumb.y - 0.5) * 6.0 + state.autoCenterOffset.y, -thumb.z * 5);
+          checkCollision(state.pinchPosition);
         }
-
-        updateParticles(handParticles, result.landmarks.flat(), time, false);
+        updateVolumetricParticles(handParticles, result.landmarks.flat(), time, false);
       }
     }
   }
-
   composer.render();
   requestAnimationFrame(loop);
 }
 
 // ==========================================================
-// 📐 PHYSICS & MATH
+// 💠 VOLUMETRIC UPDATE
 // ==========================================================
-function updateParticles(system, landmarks, time, isFace) {
+function updateVolumetricParticles(system, landmarks, time, isFace) {
   const positions = system.geometry.attributes.position.array;
   const count = landmarks.length;
-  
   const aspect = window.innerWidth / window.innerHeight;
   const spreadX = 9.0 * aspect; 
   const spreadY = 7.0;
   
-  for (let i = 0; i < positions.length / 3; i++) {
-    if (i >= landmarks.length) break; 
+  for (let i = 0; i < count; i++) {
     const lm = landmarks[i];
-    
-    let tx = (lm.x - 0.5) * -spreadX; 
-    let ty = -(lm.y - 0.5) * spreadY; 
-    let tz = -lm.z * 5;
+    const bx = (lm.x - 0.5) * -spreadX; 
+    const by = -(lm.y - 0.5) * spreadY; 
+    const bz = -lm.z * 5;
+    const startIdx = i * config.particleLayers * 3;
 
-    let noiseAmp = config.baseNoise;
-    // REDUCE NOISE ON LIPS (Indices 0-20)
-    if (isFace && i < 20) noiseAmp = 0.005; 
-    
-    // INCREASE NOISE FOR EFFECTS
-    if (state.isMouthOpen) noiseAmp = 0.08;
-    if (state.isSmiling) noiseAmp = 0.04;
+    for (let layer = 0; layer < config.particleLayers; layer++) {
+        const idx = startIdx + (layer * 3);
+        let depthOffset = 0;
+        if (layer === 1) depthOffset = 0.3; 
+        if (layer === 2) depthOffset = -0.3; 
 
-    const nX = Math.sin(time * 2 + i) * noiseAmp;
-    const nY = Math.cos(time * 3 + i) * noiseAmp;
-    
-    if (state.isSmiling && isFace) {
-       ty += 0.2; 
-       tx += Math.sin(time * 5 + i) * 0.02; 
+        let noise = config.baseNoise;
+        if (state.isMouthOpen) noise = 0.05; 
+        if (layer > 0) noise *= 2.0; 
+
+        const nX = Math.sin(time * 3 + i + layer) * noise;
+        const nY = Math.cos(time * 2 + i + layer) * noise;
+
+        let tx = bx + state.autoCenterOffset.x + nX;
+        let ty = by + state.autoCenterOffset.y + nY;
+        let tz = bz + depthOffset;
+
+        if (state.isPinching) {
+           const dist = Math.sqrt(Math.pow(state.pinchPosition.x - tx, 2) + Math.pow(state.pinchPosition.y - ty, 2));
+           if (dist < 2.5) {
+               tx = THREE.MathUtils.lerp(tx, state.pinchPosition.x, 0.2);
+               ty = THREE.MathUtils.lerp(ty, state.pinchPosition.y, 0.2);
+           }
+        }
+
+        positions[idx]   += (tx - positions[idx]) * config.lerpSpeed;
+        positions[idx+1] += (ty - positions[idx+1]) * config.lerpSpeed;
+        positions[idx+2] += (tz - positions[idx+2]) * config.lerpSpeed;
     }
-
-    if (state.isPinching) {
-       const dx = state.pinchPosition.x - tx;
-       const dy = state.pinchPosition.y - ty;
-       const dz = state.pinchPosition.z - tz;
-       const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-       if (dist < 2.0) {
-          tx = THREE.MathUtils.lerp(tx, state.pinchPosition.x, 0.15);
-          ty = THREE.MathUtils.lerp(ty, state.pinchPosition.y, 0.15);
-          tz = THREE.MathUtils.lerp(tz, state.pinchPosition.z, 0.15);
-       }
-    }
-
-    const idx = i * 3;
-    positions[idx]   += (tx + nX - positions[idx]) * config.lerpSpeed;
-    positions[idx+1] += (ty + nY - positions[idx+1]) * config.lerpSpeed;
-    positions[idx+2] += (tz - positions[idx+2]) * config.lerpSpeed;
   }
   system.geometry.attributes.position.needsUpdate = true;
 }
 
 // ==========================================================
-// 🎛️ FIXED CONTROLS (THE MENU)
+// 🎛️ UI
 // ==========================================================
 const pane = new Pane({ title: 'Burhan Settings' });
-
-// 1. Particle Size (Visual Update)
-pane.addBinding(config, 'particleSize', { min: 0.01, max: 0.15, label: 'Particle Size' })
-    .on('change', (ev) => {
-        faceParticles.material.size = ev.value;
-        handParticles.material.size = ev.value;
-    });
-
-// 2. Bloom/Glow (Post-Processing Update)
-pane.addBinding(config, 'bloomStrength', { min: 0.0, max: 2.5, label: 'Glow Strength' })
-    .on('change', (ev) => {
-        bloomPass.strength = ev.value;
-    });
-
-pane.addBinding(config, 'bloomRadius', { min: 0.0, max: 1.0, label: 'Glow Radius' })
-    .on('change', (ev) => {
-        bloomPass.radius = ev.value;
-    });
-
-// 3. Logic (Loop Updates automatically read config)
-pane.addBinding(config, 'lerpSpeed', { min: 0.05, max: 0.5, label: 'Tracking Speed' });
-pane.addBinding(config, 'mouthThreshold', { min: 0.01, max: 0.15, label: 'Mouth Sensitivity' });
-
+pane.addBinding(config, 'centeringSpeed', { min: 0.0, max: 0.1 });
+pane.addBinding(config, 'particleSize', { min: 0.01, max: 0.1 });
+pane.addBinding(config, 'bloomStrength', { min: 0, max: 2.5 });
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
 });
-
-setupVision();
