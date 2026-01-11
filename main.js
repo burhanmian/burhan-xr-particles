@@ -21,14 +21,14 @@ function log(msg) {
   debugDiv.innerHTML = `STATUS: ${msg}<br><span style="font-size:10px; color:#ccc;">(Please Allow Camera Access)</span>`; 
   console.log(msg); 
 }
-log("Initializing XR System...");
+log("Initializing System...");
 
 // ==========================================================
 // 🎨 CONFIGURATION
 // ==========================================================
 const config = {
   faceLayers: 3,         
-  handLayers: 20,        // Thick trails
+  handLayers: 20,        
   particleSize: 0.05,
   use3D: true,           
   rainbowMode: false,
@@ -55,48 +55,94 @@ const state = {
 };
 
 // ==========================================================
-// 🖥️ UI: HUD (LEFT SIDE)
+// 📱 RESPONSIVE UI STYLES (INJECTED CSS)
+// ==========================================================
+function injectStyles() {
+  const style = document.createElement('style');
+  style.innerHTML = `
+    /* HUD CONTAINER */
+    #xr-hud {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    /* HEADER SECTION (Top Left) */
+    .xr-header {
+      position: absolute; top: 20px; left: 20px; text-align: left;
+    }
+    .xr-logo {
+      margin: 0; font-weight: 900; color: #fff; text-transform: uppercase; letter-spacing: -1px;
+      /* FLUID FONT SIZE: Minimum 24px, Preferred 5vw, Max 48px */
+      font-size: clamp(24px, 5vw, 48px);
+      text-shadow: 0 0 10px ${config.faceColor}, 0 0 20px ${config.faceColor};
+    }
+    .xr-sub {
+      font-family: monospace; color: #ccc; letter-spacing: 2px;
+      background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px; display: inline-block;
+      font-size: clamp(10px, 2vw, 14px);
+    }
+    .xr-score {
+      margin-top: 5px; color: #FFD700; font-family: monospace; font-weight: bold;
+      text-shadow: 0 0 10px #FFD700;
+      font-size: clamp(18px, 4vw, 28px);
+    }
+
+    /* INSTRUCTIONS (Bottom Right) */
+    .xr-instr {
+      position: absolute; bottom: 20px; right: 20px; color: ${config.faceColor}; text-align: right;
+      font-family: monospace; background: rgba(0, 0, 0, 0.85); padding: 15px;
+      border-radius: 12px; border-right: 4px solid ${config.faceColor}; 
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      font-size: clamp(10px, 2.5vw, 14px); /* Adaptive text size */
+      max-width: 40%; /* Prevent it covering too much on phone */
+    }
+
+    /* MOBILE TWEAKS */
+    @media (max-width: 600px) {
+      .xr-instr {
+        bottom: 10px; right: 10px; padding: 10px;
+        max-width: 60%;
+      }
+      .xr-header { top: 10px; left: 10px; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// ==========================================================
+// 🖥️ UI CREATION
 // ==========================================================
 let scoreElement;
 
 function createHUD() {
+  injectStyles(); // Load the CSS first
+
   const container = document.createElement('div');
-  Object.assign(container.style, { position: 'absolute', width: '100%', height: '100%', pointerEvents: 'none', top: '0', left: '0' });
+  container.id = 'xr-hud';
   
-  // 1. HEADER (TOP LEFT)
+  // 1. HEADER
   const header = document.createElement('div');
-  Object.assign(header.style, { position: 'absolute', top: '20px', left: '20px', textAlign: 'left' });
+  header.className = 'xr-header';
   header.innerHTML = `
-    <h1 style="
-      margin: 0; font-family: 'Segoe UI', sans-serif; font-weight: 900; 
-      font-size: 48px; color: #fff; text-transform: uppercase; letter-spacing: -1px;
-      text-shadow: 0 0 10px ${config.faceColor}, 0 0 20px ${config.faceColor};
-    ">BURHAN</h1>
-    <div style="
-      font-family: monospace; color: #ccc; font-size: 14px; letter-spacing: 2px;
-      background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 4px; display: inline-block;
-    ">XR INTERACTIVE MIRROR</div>
+    <h1 class="xr-logo">BURHAN</h1>
+    <div class="xr-sub">XR INTERACTIVE MIRROR</div>
   `;
 
-  // 2. SCORE (BELOW HEADER)
+  // 2. SCORE
   scoreElement = document.createElement('div');
-  Object.assign(scoreElement.style, { marginTop: '10px', color: '#FFD700', fontFamily: 'monospace', fontSize: '28px', fontWeight: 'bold', textShadow: '0 0 10px #FFD700' });
+  scoreElement.className = 'xr-score';
   scoreElement.innerHTML = `SCORE: 000`;
   header.appendChild(scoreElement);
 
-  // 3. INSTRUCTIONS (BOTTOM RIGHT)
+  // 3. INSTRUCTIONS
   const instr = document.createElement('div');
-  Object.assign(instr.style, {
-    position: 'absolute', bottom: '30px', right: '30px', color: config.faceColor, textAlign: 'right',
-    fontFamily: "monospace", background: 'rgba(0, 0, 0, 0.85)', padding: '20px',
-    borderRadius: '12px', borderRight: `4px solid ${config.faceColor}`, boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
-  });
+  instr.className = 'xr-instr';
   instr.innerHTML = `
-    <b style="color:white; font-size:16px;">// HOW TO PLAY</b><br>
-    <span style="color:#FFD700">★ CATCH STARS (+10 PTS)</span><br>
-    <span style="color:#aaa">⚡ MOVE HANDS = TRAILS</span><br>
-    <span style="color:#aaa">🌑 PINCH = BLACK HOLE</span><br>
-    <span style="color:#aaa">🔊 OPEN MOUTH = SHOCKWAVE</span>
+    <b style="color:white; display:block; margin-bottom:5px;">// HOW TO PLAY</b>
+    <span style="color:#FFD700">★ CATCH STARS (+10)</span><br>
+    <span style="color:#aaa">⚡ MOVE HANDS</span><br>
+    <span style="color:#aaa">🌑 PINCH FINGERS</span><br>
+    <span style="color:#aaa">🔊 OPEN MOUTH</span>
   `;
   
   container.appendChild(header);
@@ -135,7 +181,7 @@ composer.addPass(renderScene);
 composer.addPass(bloomPass);
 
 // ==========================================================
-// 🎮 GAME LOGIC (Stars)
+// 🎮 GAME LOGIC
 // ==========================================================
 const targets = []; 
 const targetGeo = new THREE.SphereGeometry(0.12, 8, 8);
@@ -157,12 +203,12 @@ function updateGame(time) {
 function checkCollision(position) {
   for (let i = targets.length - 1; i >= 0; i--) {
     const t = targets[i];
-    if (position.distanceTo(t.position) < 0.6) { // Hit Radius
+    if (position.distanceTo(t.position) < 0.6) { 
       scene.remove(t);
       targets.splice(i, 1);
-      state.score += 10; // SCORE CALCULATION
+      state.score += 10;
       updateHUD();
-      config.bloomStrength = 3.0; // Flash
+      config.bloomStrength = 3.0; 
       setTimeout(() => { config.bloomStrength = 1.2 }, 150);
     }
   }
