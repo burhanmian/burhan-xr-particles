@@ -7,7 +7,7 @@ import { FilesetResolver, FaceLandmarker, HandLandmarker } from '@mediapipe/task
 import { Pane } from 'tweakpane';
 
 // ==========================================================
-// 🚨 DEBUG LOGGER (Step-by-Step Tracker)
+// 🚨 DEBUG LOGGER
 // ==========================================================
 const debugDiv = document.createElement('div');
 Object.assign(debugDiv.style, {
@@ -21,19 +21,19 @@ function log(msg) {
   debugDiv.innerHTML = `STATUS: ${msg}<br><span style="font-size:10px; color:#ccc;">(Please Allow Camera Access)</span>`; 
   console.log(msg); 
 }
-log("Initializing System...");
+log("Initializing XR System...");
 
 // ==========================================================
 // 🎨 CONFIGURATION
 // ==========================================================
 const config = {
   faceLayers: 3,         
-  handLayers: 20,        
+  handLayers: 20,        // Thick trails
   particleSize: 0.05,
   use3D: true,           
   rainbowMode: false,
-  faceColor: '#D4F842',  
-  handColor: '#00FFFF',  
+  faceColor: '#D4F842',  // Burhan Lime
+  handColor: '#00FFFF',  // Cyan Energy
   lerpSpeed: 0.2,       
   baseNoise: 0.01,
   centeringSpeed: 0.03,  
@@ -55,7 +55,7 @@ const state = {
 };
 
 // ==========================================================
-// 🖥️ UI: HUD
+// 🖥️ UI: HUD (LEFT SIDE)
 // ==========================================================
 let scoreElement;
 
@@ -63,8 +63,9 @@ function createHUD() {
   const container = document.createElement('div');
   Object.assign(container.style, { position: 'absolute', width: '100%', height: '100%', pointerEvents: 'none', top: '0', left: '0' });
   
+  // 1. HEADER (TOP LEFT)
   const header = document.createElement('div');
-  Object.assign(header.style, { position: 'absolute', top: '20px', right: '20px', textAlign: 'right' });
+  Object.assign(header.style, { position: 'absolute', top: '20px', left: '20px', textAlign: 'left' });
   header.innerHTML = `
     <h1 style="
       margin: 0; font-family: 'Segoe UI', sans-serif; font-weight: 900; 
@@ -77,22 +78,25 @@ function createHUD() {
     ">XR INTERACTIVE MIRROR</div>
   `;
 
+  // 2. SCORE (BELOW HEADER)
   scoreElement = document.createElement('div');
-  Object.assign(scoreElement.style, { marginTop: '10px', color: '#FFD700', fontFamily: 'monospace', fontSize: '24px', fontWeight: 'bold' });
+  Object.assign(scoreElement.style, { marginTop: '10px', color: '#FFD700', fontFamily: 'monospace', fontSize: '28px', fontWeight: 'bold', textShadow: '0 0 10px #FFD700' });
   scoreElement.innerHTML = `SCORE: 000`;
   header.appendChild(scoreElement);
 
+  // 3. INSTRUCTIONS (BOTTOM RIGHT)
   const instr = document.createElement('div');
   Object.assign(instr.style, {
-    position: 'absolute', bottom: '30px', left: '30px', color: config.faceColor,
+    position: 'absolute', bottom: '30px', right: '30px', color: config.faceColor, textAlign: 'right',
     fontFamily: "monospace", background: 'rgba(0, 0, 0, 0.85)', padding: '20px',
-    borderRadius: '12px', borderLeft: `4px solid ${config.faceColor}`, boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+    borderRadius: '12px', borderRight: `4px solid ${config.faceColor}`, boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
   });
   instr.innerHTML = `
-    <b style="color:white; font-size:16px;">// CONTROLS</b><br>
-    <span style="color:#aaa">• MOVE HANDS = TRAILS</span><br>
-    <span style="color:#aaa">• PINCH = BLACK HOLE</span><br>
-    <span style="color:#aaa">• OPEN MOUTH = SHOCKWAVE</span>
+    <b style="color:white; font-size:16px;">// HOW TO PLAY</b><br>
+    <span style="color:#FFD700">★ CATCH STARS (+10 PTS)</span><br>
+    <span style="color:#aaa">⚡ MOVE HANDS = TRAILS</span><br>
+    <span style="color:#aaa">🌑 PINCH = BLACK HOLE</span><br>
+    <span style="color:#aaa">🔊 OPEN MOUTH = SHOCKWAVE</span>
   `;
   
   container.appendChild(header);
@@ -131,7 +135,7 @@ composer.addPass(renderScene);
 composer.addPass(bloomPass);
 
 // ==========================================================
-// 🎮 GAME LOGIC
+// 🎮 GAME LOGIC (Stars)
 // ==========================================================
 const targets = []; 
 const targetGeo = new THREE.SphereGeometry(0.12, 8, 8);
@@ -153,12 +157,12 @@ function updateGame(time) {
 function checkCollision(position) {
   for (let i = targets.length - 1; i >= 0; i--) {
     const t = targets[i];
-    if (position.distanceTo(t.position) < 0.6) { 
+    if (position.distanceTo(t.position) < 0.6) { // Hit Radius
       scene.remove(t);
       targets.splice(i, 1);
-      state.score += 10;
+      state.score += 10; // SCORE CALCULATION
       updateHUD();
-      config.bloomStrength = 3.0; 
+      config.bloomStrength = 3.0; // Flash
       setTimeout(() => { config.bloomStrength = 1.2 }, 150);
     }
   }
@@ -183,7 +187,6 @@ function createSystem(landmarkCount, layers, colorHex) {
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(totalParticles * 3);
   for(let i=0; i<totalParticles*3; i++) positions[i] = (Math.random()-0.5)*20; 
-  
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   
   const material = new THREE.PointsMaterial({
@@ -207,7 +210,7 @@ scene.add(faceParticles);
 scene.add(handParticles);
 
 // ==========================================================
-// 🧠 COMPUTER VISION (FIXED LOADER)
+// 🧠 COMPUTER VISION
 // ==========================================================
 let faceLandmarker, handLandmarker, video;
 let lastVideoTime = -1;
@@ -216,28 +219,18 @@ async function setupVision() {
   log("Downloading AI Models...");
   try {
     const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
-    
-    faceLandmarker = await FaceLandmarker.createFromOptions(vision, { 
-        baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" }, 
-        runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true 
-    });
-    
-    handLandmarker = await HandLandmarker.createFromOptions(vision, { 
-        baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, 
-        runningMode: "VIDEO", numHands: 2 
-    });
-    
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true });
+    handLandmarker = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numHands: 2 });
     log("AI Ready. Requesting Camera...");
     startWebcam();
   } catch(e) { log("AI Error: " + e); }
 }
 
 function startWebcam() {
-  // FIXED: Add video to DOM so browsers don't throttle it
   video = document.createElement("video");
   video.style.opacity = '0';
   video.style.position = 'absolute';
-  video.setAttribute('playsinline', ''); // CRITICAL FOR IPHONE
+  video.setAttribute('playsinline', ''); 
   document.body.appendChild(video);
 
   navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "user" } }).then((stream) => {
@@ -398,7 +391,7 @@ function updateParticles(system, landmarks, time, type) {
 }
 
 // ==========================================================
-// 🎛️ CONTROLS
+// 🎛️ CONTROLS (Tweakpane)
 // ==========================================================
 const pane = new Pane({ title: 'Burhan Controls' });
 const dimFolder = pane.addFolder({ title: 'Dimensions' });
