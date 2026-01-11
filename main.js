@@ -7,37 +7,19 @@ import { FilesetResolver, FaceLandmarker, HandLandmarker } from '@mediapipe/task
 import { Pane } from 'tweakpane';
 
 // ==========================================================
-// 🚨 DEBUG LOGGER (So we know what's happening)
+// 🎨 CONFIGURATION & STATE
 // ==========================================================
-const debugDiv = document.createElement('div');
-debugDiv.style.position = 'absolute';
-debugDiv.style.top = '10px';
-debugDiv.style.left = '10px';
-debugDiv.style.color = '#00ff00';
-debugDiv.style.fontFamily = 'monospace';
-debugDiv.style.fontSize = '12px';
-debugDiv.style.zIndex = '999';
-debugDiv.style.pointerEvents = 'none';
-document.body.appendChild(debugDiv);
-
-function log(msg) {
-  debugDiv.innerHTML += `> ${msg}<br>`;
-  console.log(msg);
-}
-
-log("Initializing System...");
-
-// ==========================================================
-// 🎨 CONFIGURATION
-// ==========================================================
-const PORTFOLIO_THEME_COLOR = '#D4F842'; // Lime Green
-const GAME_OBJECT_COLOR = '#FFD700';     // Gold
-
 const config = {
   // Visuals
-  faceLayers: 3,         
-  handLayers: 12,        // 12 Layers for THICK hands
-  particleSize: 0.05,   
+  faceLayers: 3,         // Depth for 3D mode
+  handLayers: 12,        // Thickness for hands
+  particleSize: 0.05,
+  use3D: true,           // Toggle 2D/3D
+  
+  // Colors
+  rainbowMode: false,
+  faceColor: '#D4F842',  // Burhan Lime
+  handColor: '#00FFFF',  // Cyan (Multicolor contrast)
   
   // Physics
   lerpSpeed: 0.2,       
@@ -64,56 +46,79 @@ const state = {
 };
 
 // ==========================================================
-// 🎨 HUD & LOGO (HTML Version - Safer & Cleaner)
+// 🖥️ UI: HUD & HEADER
 // ==========================================================
 let scoreElement;
+
 function createHUD() {
   const container = document.createElement('div');
   container.style.position = 'absolute';
   container.style.width = '100%';
   container.style.height = '100%';
-  container.style.pointerEvents = 'none'; 
+  container.style.pointerEvents = 'none'; // Let clicks pass through
   
-  // LOGO (Top Right)
-  const logo = document.createElement('div');
-  logo.style.position = 'absolute';
-  logo.style.top = '30px';
-  logo.style.right = '30px';
-  logo.style.textAlign = 'right';
-  logo.innerHTML = `
-    <h1 style="margin:0; font-family:sans-serif; font-weight:900; font-size:40px; color:${PORTFOLIO_THEME_COLOR}; letter-spacing:-2px; text-shadow:0 0 20px ${PORTFOLIO_THEME_COLOR}">BURHAN</h1>
-    <div style="font-family:monospace; color:white; font-size:14px; opacity:0.7;">XR DESIGNER // SYSTEM ONLINE</div>
+  // 1. BURHAN HEADER (Top Right)
+  const header = document.createElement('div');
+  header.style.position = 'absolute';
+  header.style.top = '20px';
+  header.style.right = '20px';
+  header.style.textAlign = 'right';
+  header.innerHTML = `
+    <h1 style="
+      margin: 0; 
+      font-family: 'Segoe UI', sans-serif; 
+      font-weight: 900; 
+      font-size: 48px; 
+      color: #fff; 
+      text-transform: uppercase; 
+      letter-spacing: -1px;
+      text-shadow: 
+        0 0 10px ${config.faceColor},
+        0 0 20px ${config.faceColor},
+        0 0 40px ${config.faceColor};
+    ">BURHAN</h1>
+    <div style="
+      font-family: monospace; 
+      color: #ccc; 
+      font-size: 14px; 
+      letter-spacing: 2px;
+      background: rgba(0,0,0,0.5);
+      padding: 5px 10px;
+      border-radius: 4px;
+      display: inline-block;
+    ">INTERACTIVE MIRROR v2.0</div>
   `;
 
-  // SCORE (Below Logo)
+  // 2. SCORE (Below Header)
   scoreElement = document.createElement('div');
   scoreElement.style.marginTop = '10px';
-  scoreElement.style.color = GAME_OBJECT_COLOR;
+  scoreElement.style.color = '#FFD700';
   scoreElement.style.fontFamily = 'monospace';
   scoreElement.style.fontSize = '24px';
   scoreElement.style.fontWeight = 'bold';
   scoreElement.innerHTML = `SCORE: 000`;
-  logo.appendChild(scoreElement);
+  header.appendChild(scoreElement);
 
-  // INSTRUCTIONS (Bottom Left)
+  // 3. INSTRUCTIONS (Bottom Left)
   const instr = document.createElement('div');
   instr.style.position = 'absolute';
   instr.style.bottom = '30px';
   instr.style.left = '30px';
-  instr.style.color = PORTFOLIO_THEME_COLOR;
-  instr.style.fontFamily = "'Courier New', monospace"; 
-  instr.style.background = 'rgba(0, 0, 0, 0.8)';
+  instr.style.color = config.faceColor;
+  instr.style.fontFamily = "monospace"; 
+  instr.style.background = 'rgba(0, 0, 0, 0.85)';
   instr.style.padding = '20px';
   instr.style.borderRadius = '12px';
-  instr.style.border = `1px solid ${PORTFOLIO_THEME_COLOR}`;
+  instr.style.borderLeft = `4px solid ${config.faceColor}`;
+  instr.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
   instr.innerHTML = `
-    <b style="color:white">// CONTROLS</b><br>
-    • CATCH STARS WITH HEAD/HAND<br>
-    • PINCH FINGERS = BLACK HOLE<br>
-    • AUTO-CENTERING ENABLED
+    <b style="color:white; font-size:16px;">// CONTROLS</b><br>
+    <span style="color:#aaa">• CATCH STARS</span><br>
+    <span style="color:#aaa">• PINCH = BLACK HOLE</span><br>
+    <span style="color:#aaa">• OPEN MOUTH = SHOCKWAVE</span>
   `;
   
-  container.appendChild(logo);
+  container.appendChild(header);
   container.appendChild(instr);
   document.body.appendChild(container);
 }
@@ -123,7 +128,7 @@ function updateHUD() {
 }
 
 // ==========================================================
-// 🔹 SCENE SETUP
+// 🔹 THREE.JS SETUP
 // ==========================================================
 const app = document.querySelector('#app');
 const scene = new THREE.Scene();
@@ -131,7 +136,7 @@ scene.background = new THREE.Color('#050505');
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.z = 2.5; 
-camera.scale.x = -1; 
+camera.scale.x = -1; // Mirror Flip
 
 const renderer = new THREE.WebGLRenderer({ powerPreference: "high-performance", alpha: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -149,11 +154,11 @@ composer.addPass(renderScene);
 composer.addPass(bloomPass);
 
 // ==========================================================
-// 🎮 GAME LOGIC
+// 🎮 GAME LOGIC (Stars)
 // ==========================================================
 const targets = []; 
 const targetGeo = new THREE.SphereGeometry(0.12, 8, 8);
-const targetMat = new THREE.MeshBasicMaterial({ color: GAME_OBJECT_COLOR, wireframe: true });
+const targetMat = new THREE.MeshBasicMaterial({ color: 0xFFD700, wireframe: true });
 
 function spawnTarget() {
   if (targets.length >= 6) return; 
@@ -176,14 +181,15 @@ function checkCollision(position) {
       targets.splice(i, 1);
       state.score += 10;
       updateHUD();
-      config.bloomStrength = 2.0; 
+      // Flash effect
+      config.bloomStrength = 2.5; 
       setTimeout(() => { config.bloomStrength = 0.8 }, 150);
     }
   }
 }
 
 // ==========================================================
-// 💠 VOLUMETRIC PARTICLES
+// 💠 PARTICLE SYSTEM
 // ==========================================================
 function getTexture() {
   const canvas = document.createElement('canvas');
@@ -200,7 +206,9 @@ function createSystem(landmarkCount, layers, colorHex) {
   const totalParticles = landmarkCount * layers;
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(totalParticles * 3);
-  for(let i=0; i<totalParticles*3; i++) positions[i] = (Math.random()-0.5)*20; // Initialize wide
+  // Initial scatter
+  for(let i=0; i<totalParticles*3; i++) positions[i] = (Math.random()-0.5)*20; 
+  
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   
   const material = new THREE.PointsMaterial({
@@ -214,13 +222,12 @@ function createSystem(landmarkCount, layers, colorHex) {
   });
   
   const points = new THREE.Points(geometry, material);
-  points.userData = { layers: layers }; // Store layer count
+  points.userData = { layers: layers, originalColor: new THREE.Color(colorHex) }; 
   return points;
 }
 
-// Create Systems
-const faceParticles = createSystem(478, config.faceLayers, PORTFOLIO_THEME_COLOR);
-const handParticles = createSystem(42, config.handLayers, PORTFOLIO_THEME_COLOR); 
+const faceParticles = createSystem(478, config.faceLayers, config.faceColor);
+const handParticles = createSystem(42, config.handLayers, config.handColor); 
 scene.add(faceParticles);
 scene.add(handParticles);
 
@@ -231,53 +238,27 @@ let faceLandmarker, handLandmarker, video;
 let lastVideoTime = -1;
 
 async function setupVision() {
-  log("Loading AI Models...");
-  try {
-    const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
-    
-    faceLandmarker = await FaceLandmarker.createFromOptions(vision, { 
-        baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" }, 
-        runningMode: "VIDEO", 
-        numFaces: 1, 
-        outputFaceBlendshapes: true 
-    });
-    
-    handLandmarker = await HandLandmarker.createFromOptions(vision, { 
-        baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, 
-        runningMode: "VIDEO", 
-        numHands: 2 
-    });
-    
-    log("AI Models Loaded.");
-    startWebcam();
-  } catch (err) {
-    log("ERROR LOADING AI: " + err.message);
-  }
+  const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm");
+  faceLandmarker = await FaceLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true });
+  handLandmarker = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numHands: 2 });
+  startWebcam();
 }
 
 function startWebcam() {
-  log("Requesting Camera...");
   video = document.createElement("video");
-  navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "user" } })
-  .then((stream) => {
+  navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "user" } }).then((stream) => {
     video.srcObject = stream;
     video.play();
     video.addEventListener("loadeddata", () => {
-        log("Camera Active. System Running.");
         createHUD();
         spawnTarget();
         loop();
-        // Hide Debug log after 3 seconds
-        setTimeout(() => debugDiv.style.display = 'none', 3000);
     });
-  })
-  .catch(err => {
-    log("CAMERA DENIED: " + err.message);
   });
 }
 
 // ==========================================================
-// 🔄 LOGIC LOOP
+// 🔄 ANIMATION LOOP
 // ==========================================================
 const clock = new THREE.Clock();
 
@@ -286,6 +267,17 @@ function loop() {
   let startTimeMs = performance.now();
   
   updateGame(time);
+
+  // Rainbow Mode Logic
+  if (config.rainbowMode) {
+    const hue = (time * 0.2) % 1;
+    faceParticles.material.color.setHSL(hue, 1, 0.5);
+    handParticles.material.color.setHSL((hue + 0.5) % 1, 1, 0.5); // Offset hands
+  } else {
+    // Return to selected colors slowly if not in rainbow mode
+    faceParticles.material.color.lerp(new THREE.Color(config.faceColor), 0.1);
+    handParticles.material.color.lerp(new THREE.Color(config.handColor), 0.1);
+  }
 
   if (video && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
@@ -296,7 +288,7 @@ function loop() {
       if (result.faceLandmarks.length > 0) {
         const landmarks = result.faceLandmarks[0];
         
-        // Auto-Centering
+        // Auto-Center
         const noseX = landmarks[1].x;
         const noseY = landmarks[1].y;
         const targetOffsetX = (0.5 - noseX) * 5.0; 
@@ -310,6 +302,8 @@ function loop() {
         const upper = landmarks[13]; const lower = landmarks[14];
         state.isMouthOpen = Math.hypot(upper.x - lower.x, upper.y - lower.y) > config.mouthThreshold;
         
+        if (state.isMouthOpen) faceParticles.material.color.setHex(0xFFFFFF); // Shockwave Color
+
         updateVolumetricParticles(faceParticles, landmarks, time);
       }
     }
@@ -319,7 +313,7 @@ function loop() {
       const result = handLandmarker.detectForVideo(video, startTimeMs);
       state.isPinching = false; 
       if (result.landmarks.length > 0) {
-        const hand = result.landmarks[0]; // Just use first hand
+        const hand = result.landmarks[0]; 
         const thumb = hand[4]; const index = hand[8];
         if (Math.hypot(thumb.x - index.x, thumb.y - index.y) < config.pinchThreshold) {
           state.isPinching = true;
@@ -335,18 +329,16 @@ function loop() {
 }
 
 // ==========================================================
-// 💠 UNIVERSAL PARTICLE UPDATER
+// 💠 UPDATE LOGIC (Handles 2D/3D Switching)
 // ==========================================================
 function updateVolumetricParticles(system, landmarks, time) {
   const positions = system.geometry.attributes.position.array;
   const count = landmarks.length;
-  const layers = system.userData.layers; // Access specific layer count
-  
+  const layers = system.userData.layers; 
   const aspect = window.innerWidth / window.innerHeight;
   const spreadX = 9.0 * aspect; 
   const spreadY = 7.0;
   
-  // Safety check to prevent index out of bounds if tracking glitches
   const limit = Math.floor(positions.length / 3);
 
   for (let i = 0; i < count; i++) {
@@ -358,11 +350,19 @@ function updateVolumetricParticles(system, landmarks, time) {
     const startIdx = i * layers * 3;
 
     for (let layer = 0; layer < layers; layer++) {
+        // 2D MODE CHECK: If 3D is off, hide all layers except layer 0
+        if (!config.use3D && layer > 0) {
+           // Move hidden particles far away so they don't render
+           const idx = startIdx + (layer * 3);
+           if (idx/3 < limit) positions[idx+2] = 9999; 
+           continue;
+        }
+
         const idx = startIdx + (layer * 3);
         if (idx/3 >= limit) continue;
 
-        let depthOffset = (layer - (layers/2)) * 0.15; // Spread layers more
-
+        let depthOffset = (layer - (layers/2)) * 0.15; 
+        
         let noise = config.baseNoise;
         if (state.isMouthOpen) noise = 0.05; 
         if (layer > 0) noise *= 2.0; 
@@ -391,12 +391,38 @@ function updateVolumetricParticles(system, landmarks, time) {
 }
 
 // ==========================================================
-// 🎛️ SETTINGS UI
+// 🎛️ CONTROLS (User Settings)
 // ==========================================================
-const pane = new Pane({ title: 'Burhan Settings' });
-pane.addBinding(config, 'centeringSpeed', { min: 0.0, max: 0.1 });
-pane.addBinding(config, 'particleSize', { min: 0.01, max: 0.1 });
-pane.addBinding(config, 'bloomStrength', { min: 0, max: 2.5 });
+const pane = new Pane({ title: 'Burhan Controls' });
+
+// 1. Dimensions
+const dimFolder = pane.addFolder({ title: 'Dimensions' });
+dimFolder.addBinding(config, 'use3D', { label: '3D Mode' });
+dimFolder.addBinding(config, 'particleSize', { min: 0.01, max: 0.1, label: 'Size' })
+  .on('change', (ev) => {
+     faceParticles.material.size = ev.value;
+     handParticles.material.size = ev.value;
+  });
+
+// 2. Colors
+const colFolder = pane.addFolder({ title: 'Colors' });
+colFolder.addBinding(config, 'rainbowMode', { label: 'Rainbow Loop' });
+colFolder.addBinding(config, 'faceColor', { label: 'Face Color' });
+colFolder.addBinding(config, 'handColor', { label: 'Hand Color' });
+
+const randBtn = colFolder.addButton({ title: 'RANDOMIZE ALL' });
+randBtn.on('click', () => {
+    config.faceColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+    config.handColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+    config.rainbowMode = false;
+    pane.refresh(); // Update the UI to show new colors
+});
+
+// 3. Effects
+const fxFolder = pane.addFolder({ title: 'Effects' });
+fxFolder.addBinding(config, 'bloomStrength', { min: 0, max: 3, label: 'Glow' })
+  .on('change', (ev) => bloomPass.strength = ev.value);
+
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
